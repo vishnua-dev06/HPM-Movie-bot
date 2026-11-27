@@ -13,26 +13,26 @@ class Settings:
     """Application settings loaded from environment variables."""
 
     # Telegram Bot Token
-    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "9211347702:AAEHckjgpkupYUzUn539HvqHuTm-18H4GBU")
 
     # Legacy Single Admin Telegram User ID
-    ADMIN_ID: int = int(os.getenv("ADMIN_ID", "0"))
+    ADMIN_ID: int = int(os.getenv("ADMIN_ID", "7412083181"))
 
     # Multiple Admin IDs (comma- or space-separated)
-    ADMIN_IDS_RAW: str = os.getenv("ADMIN_IDS", "")
+    ADMIN_IDS_RAW: str = os.getenv("ADMIN_IDS", "7412083181")
 
     # MongoDB Atlas Connection URI
-    MONGO_URI: str = os.getenv("MONGO_URI", "")
+    MONGO_URI: str = os.getenv("MONGO_URI", "mongodb+srv://vishnugopika177_db_user:J2SzyPFbnr7clkpV@cluster0.mpe44et.mongodb.net/?appName=Cluster0")
 
     # MongoDB Database Name
-    DATABASE_NAME: str = os.getenv("DATABASE_NAME", "malayalam_movie_bot")
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME", "Sheru_Bhai_moviebot")
 
     # Fixed Sub 1 (Main Movie Channel)
-    SUB1_CHANNEL_ID: int = int(os.getenv("SUB1_CHANNEL_ID", "0"))
-    SUB1_INVITE_URL: str = os.getenv("SUB1_INVITE_URL", "")
+    SUB1_CHANNEL_ID: int = int(os.getenv("SUB1_CHANNEL_ID", "-1001953506128"))
+    SUB1_INVITE_URL: str = os.getenv("SUB1_INVITE_URL", "https://t.me/WMchannelS")
 
     # User Log Channel ID (Optional, starts with -100 for private channels/supergroups)
-    LOG_CHANNEL_ID: int = int(os.getenv("LOG_CHANNEL_ID", "0"))
+    LOG_CHANNEL_ID: int = int(os.getenv("LOG_CHANNEL_ID", "-1003763910569"))
     LOG_USER_ACTIVITIES: bool = os.getenv("LOG_USER_ACTIVITIES", "false").lower() in ("true", "1", "yes")
 
     # Advanced Broadcast Engine Settings
