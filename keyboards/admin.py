@@ -6,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 def build_admin_dashboard_keyboard() -> InlineKeyboardMarkup:
-    """Build the main 9-button Administrator Dashboard."""
+    """Build the comprehensive Administrator Dashboard with User Log Channel, Admin Management, and Advanced Broadcast."""
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -19,7 +19,11 @@ def build_admin_dashboard_keyboard() -> InlineKeyboardMarkup:
     )
     builder.row(
         InlineKeyboardButton(text="📢 Add Sub (Sub 2)", callback_data="admin:manage_sub"),
-        InlineKeyboardButton(text="📨 Broadcast", callback_data="admin:broadcast"),
+        InlineKeyboardButton(text="📨 Advanced Broadcast", callback_data="admin:broadcast"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="👥 Admin Management", callback_data="admin:manage_admins"),
+        InlineKeyboardButton(text="📡 Log Channel Settings", callback_data="admin:log_channel"),
     )
     builder.row(
         InlineKeyboardButton(text="👥 Users", callback_data="admin:users"),
@@ -55,6 +59,102 @@ def build_confirm_keyboard(
     return builder.as_markup()
 
 
+# -------------------------------------------------------------
+# Admin Management Keyboards
+# -------------------------------------------------------------
+def build_admin_management_keyboard() -> InlineKeyboardMarkup:
+    """Admin Management overview keyboard."""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="➕ Add Admin", callback_data="adm_add_admin"),
+        InlineKeyboardButton(text="➖ Remove Admin", callback_data="adm_remove_admin_list"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="📋 View All Admins", callback_data="adm_view_admins"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Back to Dashboard", callback_data="admin:dashboard"),
+    )
+    return builder.as_markup()
+
+
+def build_remove_admins_keyboard(
+    admins: List[Dict[str, Any]],
+    protected_owner_id: int,
+) -> InlineKeyboardMarkup:
+    """Build list of removable administrators."""
+    builder = InlineKeyboardBuilder()
+
+    for adm in admins:
+        admin_id = adm.get("admin_id")
+        role = adm.get("role", "admin")
+        if admin_id == protected_owner_id:
+            # Protected owner cannot be removed
+            continue
+
+        builder.row(
+            InlineKeyboardButton(
+                text=f"🗑 Remove Admin: {admin_id} ({role})",
+                callback_data=f"adm_rm_select:{admin_id}",
+            )
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="◀️ Back to Admin Management", callback_data="admin:manage_admins"),
+    )
+    return builder.as_markup()
+
+
+# -------------------------------------------------------------
+# User Log Channel Keyboards
+# -------------------------------------------------------------
+def build_log_channel_settings_keyboard(config: Dict[str, Any]) -> InlineKeyboardMarkup:
+    """User Log Channel settings control keyboard."""
+    builder = InlineKeyboardBuilder()
+
+    is_enabled = config.get("is_enabled", False)
+    status_text = "🔴 Disable Log Channel" if is_enabled else "🟢 Enable Log Channel"
+
+    log_activities = config.get("log_activities", False)
+    act_text = "🔕 Activity Logs: OFF" if not log_activities else "🔔 Activity Logs: ON"
+
+    builder.row(
+        InlineKeyboardButton(text="✏️ Configure Channel ID", callback_data="adm_logch_set_id"),
+        InlineKeyboardButton(text="🧪 Test Connection", callback_data="adm_logch_test"),
+    )
+    builder.row(
+        InlineKeyboardButton(text=status_text, callback_data="adm_logch_toggle"),
+        InlineKeyboardButton(text=act_text, callback_data="adm_logch_toggle_activities"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="◀️ Back to Dashboard", callback_data="admin:dashboard"),
+    )
+    return builder.as_markup()
+
+
+# -------------------------------------------------------------
+# Advanced Broadcast Keyboards
+# -------------------------------------------------------------
+def build_broadcast_collection_keyboard(collected_count: int) -> InlineKeyboardMarkup:
+    """Advanced broadcast message collection keyboard."""
+    builder = InlineKeyboardBuilder()
+
+    builder.row(
+        InlineKeyboardButton(text="➕ Add More Messages", callback_data="bcast_add_more"),
+        InlineKeyboardButton(text=f"👁 Preview ({collected_count})", callback_data="bcast_preview"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="🚀 SEND THIS MESSAGE", callback_data="bcast_confirm_send"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="❌ Cancel Broadcast", callback_data="admin:dashboard"),
+    )
+    return builder.as_markup()
+
+
+# -------------------------------------------------------------
+# Dynamic Menu Settings Keyboards
+# -------------------------------------------------------------
 def build_menu_settings_overview_keyboard(
     buttons: List[Dict[str, Any]],
 ) -> InlineKeyboardMarkup:

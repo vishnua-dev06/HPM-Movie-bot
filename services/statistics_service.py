@@ -1,7 +1,9 @@
 """Statistics aggregation service for Admin Panel."""
 
 from typing import Any, Dict
+from database.admins import AdminRepository
 from database.broadcasts import BroadcastRepository
+from database.log_channel import LogChannelRepository
 from database.movie_messages import MovieMessageRepository
 from database.movies import MovieRepository
 from database.subscriptions import SubscriptionRepository
@@ -27,11 +29,15 @@ class StatisticsService:
         total_years = await YearRepository.get_total_years_count()
         total_media = await MovieMessageRepository.get_total_media_count()
         total_broadcasts = await BroadcastRepository.get_total_broadcasts_count()
+        total_admins = await AdminRepository.count_admins()
 
         sub2 = await SubscriptionRepository.get_sub2()
         sub2_status = "Not Configured"
         if sub2:
             sub2_status = "🟢 Enabled" if sub2.get("is_enabled", False) else "🔴 Disabled"
+
+        log_cfg = await LogChannelRepository.get_config()
+        log_status = "🟢 Active" if (log_cfg.get("is_enabled") and log_cfg.get("channel_id")) else "🔴 Inactive"
 
         return {
             "total_users": total_users,
@@ -44,5 +50,7 @@ class StatisticsService:
             "total_years": total_years,
             "total_media": total_media,
             "total_broadcasts": total_broadcasts,
+            "total_admins": total_admins,
             "sub2_status": sub2_status,
+            "log_status": log_status,
         }

@@ -1,12 +1,17 @@
-"""Administrator broadcast announcement handlers."""
+"""Advanced High-Performance Broadcast announcement handlers with multi-message support and live preview."""
 
+from typing import Any, Dict, List
 from aiogram import Bot, F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.users import UserRepository
-from keyboards.admin import build_admin_cancel_keyboard
+from keyboards.admin import (
+    build_admin_cancel_keyboard,
+    build_broadcast_collection_keyboard,
+    build_confirm_keyboard,
+)
 from middlewares.admin_auth import IsAdminFilter
 from services.broadcast_service import BroadcastService
 from utils.helpers import format_number
@@ -17,123 +22,177 @@ router.message.filter(IsAdminFilter())
 router.callback_query.filter(IsAdminFilter())
 
 
-class BroadcastFSM(StatesGroup):
-    waiting_for_message = State()
-    confirming_broadcast = State()
+class AdvancedBroadcastFSM(StatesGroup):
+    collecting_messages = State()
+    confirming_send = State()
 
 
-# 1. Entry point for broadcast
+# 1. Entry point for Advanced Broadcast
 @router.callback_query(F.data == "admin:broadcast")
-async def handle_broadcast_entry(callback: types.CallbackQuery, state: FSMContext) -> None:
-    """Prompt administrator to send or forward the broadcast message."""
-    await state.clear()
-    await state.set_state(BroadcastFSM.waiting_for_message)
+async def handle_broadcast_entry(callback: types.CallbackQuery, state: FSMContext = None) -> None:
+    """Prompt administrator to initiate message collection for broadcast."""
+    if state is not None:
+        await state.clear()
+    await state.set_state(AdvancedBroadcastFSM.collecting_messages)
+    await state.update_data(messages=[])
 
     total_active = await UserRepository.get_active_users_count()
 
     text = (
-        "📨 <b>Send Global Broadcast Announcement</b>\n\n"
-        f"Eligible active recipients: <b>{format_number(total_active)}</b> user(s).\n\n"
-        "➡️ <b>Now send or forward the message you want to broadcast:</b>\n"
+        "📨 <b>Advanced Broadcast System</b>\n\n"
+        f"• Eligible Registered Recipients: <b>{format_number(total_active)}</b> user(s)\n"
+        f"• Messages Collected: <b>0</b>\n\n"
+        "➡️ <b>Send or forward your message(s) to broadcast:</b>\n"
         "• Plain text message\n"
-        "• Photo with caption\n"
-        "• Video with caption\n"
-        "• Document or audio file\n\n"
-        "<i>The exact formatting, media, and caption will be copied to all users.</i>"
+        "• Photos, Videos, or Media Albums\n"
+        "• Documents, Audio, Voice notes, Stickers, or Animations\n\n"
+        "<i>You can send multiple messages. They will be delivered together in exact order.</i>"
     )
-    cancel_kb = build_admin_cancel_keyboard(callback_data="admin:dashboard")
+    keyboard = build_broadcast_collection_keyboard(collected_count=0)
 
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=cancel_kb, parse_mode="HTML")
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
 
-# 2. Receive message to broadcast and show confirmation
+# 2. Message Collection Receiver
 @router.message(
-    BroadcastFSM.waiting_for_message,
-    F.text | F.photo | F.video | F.document | F.audio | F.animation,
+    AdvancedBroadcastFSM.collecting_messages,
+    F.text | F.photo | F.video | F.document | F.audio | F.voice | F.animation | F.sticker,
 )
-async def handle_broadcast_message_received(message: types.Message, state: FSMContext) -> None:
-    """Record source message reference and present confirmation dialogue."""
-    await state.update_data(
-        source_chat_id=message.chat.id,
-        source_message_id=message.message_id,
-    )
-    await state.set_state(BroadcastFSM.confirming_broadcast)
+async def handle_collect_broadcast_message(message: types.Message, state: FSMContext) -> None:
+    """Collect forwarded or sent message into broadcast buffer."""
+    msg_info = BroadcastService.extract_message_info(message)
+    data = await state.get_data()
+    messages_list: List[Dict[str, Any]] = data.get("messages", [])
 
-    total_active = await UserRepository.get_active_users_count()
+    messages_list.append(msg_info)
+    await state.update_data(messages=messages_list)
 
-    builder = InlineKeyboardBuilder()
-    builder.row(
-        InlineKeyboardButton(
-            text=f"🚀 Confirm Broadcast ({format_number(total_active)} Users)",
-            callback_data="adm_bcast_confirm",
-        )
-    )
-    builder.row(
-        InlineKeyboardButton(text="❌ Cancel Broadcast", callback_data="admin:dashboard"),
-    )
+    count = len(messages_list)
+    media_label = msg_info.get("media_type", "message").capitalize()
+    keyboard = build_broadcast_collection_keyboard(collected_count=count)
 
     await message.reply(
-        "👁 <b>Broadcast Message Preview Captured!</b>\n\n"
-        f"This announcement will be delivered to <b>{format_number(total_active)}</b> registered user(s).\n\n"
-        "Are you ready to send this broadcast?",
-        reply_markup=builder.as_markup(),
+        f"✅ <b>Collected message #{count}</b> ({media_label})!\n"
+        f"Total in broadcast buffer: <b>{count}</b> message(s).\n\n"
+        "Send more messages, preview the broadcast, or click <b>SEND THIS MESSAGE</b> when ready.",
+        reply_markup=keyboard,
         parse_mode="HTML",
     )
 
 
-# 3. Confirm and run broadcast
-@router.callback_query(BroadcastFSM.confirming_broadcast, F.data == "adm_bcast_confirm")
-async def handle_execute_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    """Execute asynchronous broadcast with rate limiting and output final metrics."""
+# 3. Add More Messages button
+@router.callback_query(AdvancedBroadcastFSM.collecting_messages, F.data == "bcast_add_more")
+async def handle_add_more_messages(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Notify administrator that message collection remains active."""
     data = await state.get_data()
-    source_chat_id = data.get("source_chat_id")
-    source_message_id = data.get("source_message_id")
+    count = len(data.get("messages", []))
+    await callback.answer(f"📥 Send or forward additional messages. Current count: {count}", show_alert=True)
 
-    if not source_chat_id or not source_message_id:
-        await callback.answer("❌ Broadcast message reference lost. Please start again.", show_alert=True)
+
+# 4. Preview Broadcast Content
+@router.callback_query(AdvancedBroadcastFSM.collecting_messages, F.data == "bcast_preview")
+async def handle_preview_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    """Send copies of all collected broadcast messages back to the administrator for review."""
+    data = await state.get_data()
+    messages_list: List[Dict[str, Any]] = data.get("messages", [])
+
+    if not messages_list:
+        await callback.answer("⚠️ No messages collected yet! Send at least one message first.", show_alert=True)
+        return
+
+    admin_id = callback.from_user.id if callback.from_user else 0
+    await callback.answer("Sending preview...", show_alert=False)
+
+    if callback.message:
+        await callback.message.answer(
+            f"👁 <b>BROADCAST PREVIEW ({len(messages_list)} message(s)):</b>\n"
+            "Below is the exact content that will be delivered to users:\n"
+            "────────────────────────",
+            parse_mode="HTML",
+        )
+
+    # Deliver preview directly to admin
+    await BroadcastService.deliver_messages_to_user(
+        bot=bot,
+        user_id=admin_id,
+        messages=messages_list,
+    )
+
+    keyboard = build_broadcast_collection_keyboard(collected_count=len(messages_list))
+    if callback.message:
+        await callback.message.answer(
+            "────────────────────────\n"
+            "Review complete. Choose an option below:",
+            reply_markup=keyboard,
+        )
+
+
+# 5. Prompt Send Confirmation
+@router.callback_query(AdvancedBroadcastFSM.collecting_messages, F.data == "bcast_confirm_send")
+async def handle_confirm_send_prompt(callback: types.CallbackQuery, state: FSMContext) -> None:
+    """Confirm dispatch of the broadcast to all registered users."""
+    data = await state.get_data()
+    messages_list: List[Dict[str, Any]] = data.get("messages", [])
+
+    if not messages_list:
+        await callback.answer("⚠️ No messages in broadcast buffer! Send a message first.", show_alert=True)
+        return
+
+    total_active = await UserRepository.get_active_users_count()
+    await state.set_state(AdvancedBroadcastFSM.confirming_send)
+
+    text = (
+        "🚀 <b>CONFIRM BROADCAST DISPATCH</b>\n\n"
+        f"• <b>Total Messages:</b> {len(messages_list)}\n"
+        f"• <b>Total Target Recipients:</b> {format_number(total_active)} registered users\n"
+        f"• <b>Delivery Mode:</b> High-performance controlled async worker with flood protection\n\n"
+        "Are you sure you want to begin broadcasting now?"
+    )
+    keyboard = build_confirm_keyboard(
+        confirm_callback="bcast_execute_now",
+        cancel_callback="admin:dashboard",
+    )
+
+    if callback.message:
+        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+    await callback.answer()
+
+
+# 6. Execute Broadcast
+@router.callback_query(AdvancedBroadcastFSM.confirming_send, F.data == "bcast_execute_now")
+async def handle_execute_broadcast(callback: types.CallbackQuery, state: FSMContext, bot: Bot) -> None:
+    """Launch the background broadcast worker and display real-time live progress."""
+    data = await state.get_data()
+    messages_list: List[Dict[str, Any]] = data.get("messages", [])
+
+    if not messages_list:
+        await callback.answer("❌ Message buffer lost. Please start again.", show_alert=True)
         await state.clear()
         return
 
     admin_id = callback.from_user.id if callback.from_user else 0
     await state.clear()
 
+    total_active = await UserRepository.get_active_users_count()
+
+    status_msg = None
     if callback.message:
-        await callback.message.edit_text(
-            "⏳ <b>Broadcasting in progress...</b>\n\n"
-            "Messages are being delivered with anti-flood rate limits. "
-            "A final summary report will be sent upon completion.",
+        status_msg = await callback.message.edit_text(
+            "⏳ <b>INITIALIZING BROADCAST ENGINE...</b>\n\n"
+            f"Preparing delivery queue for <b>{format_number(total_active)}</b> users.\n"
+            "Progress will update automatically below.",
             parse_mode="HTML",
         )
 
-    # Run broadcast service
-    results = await BroadcastService.run_broadcast(
+    # Launch background worker
+    broadcast_id = await BroadcastService.start_broadcast(
         bot=bot,
         admin_id=admin_id,
-        source_chat_id=source_chat_id,
-        source_message_id=source_message_id,
+        messages=messages_list,
+        status_message=status_msg,
     )
 
-    total = format_number(results["total_users"])
-    success = format_number(results["success_count"])
-    failed = format_number(results["failed_count"])
-    blocked = format_number(results["blocked_count"])
-
-    report_text = (
-        "📊 <b>Broadcast Execution Report</b>\n\n"
-        "Broadcast has completed successfully.\n\n"
-        f"• <b>Total Target Users:</b> {total}\n"
-        f"• <b>✅ Delivered Successfully:</b> {success}\n"
-        f"• <b>🚫 Blocked Bots / Inaccessible:</b> {blocked}\n"
-        f"• <b>⚠️ Other Failures:</b> {failed}\n\n"
-        "<i>Blocked users have been automatically flagged in the database.</i>"
-    )
-
-    builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="◀️ Admin Dashboard", callback_data="admin:dashboard"))
-
-    if callback.message:
-        await callback.message.answer(report_text, reply_markup=builder.as_markup(), parse_mode="HTML")
-
-    await callback.answer("✅ Broadcast complete!", show_alert=False)
+    await callback.answer("🚀 Broadcast started in background!", show_alert=False)
+    logger.info("Admin %d launched broadcast #%s", admin_id, broadcast_id)

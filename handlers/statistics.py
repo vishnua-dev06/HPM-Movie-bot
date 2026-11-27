@@ -47,8 +47,10 @@ async def handle_statistics_view(callback: types.CallbackQuery) -> None:
         f"• Available Release Years: <b>{stats['total_years']}</b>\n"
         f"• Stored Media Files: <b>{format_number(stats['total_media'])}</b>\n\n"
         "<b>📢 Operations & System:</b>\n"
+        f"• Authorized Admins: <b>{stats['total_admins']}</b>\n"
+        f"• User Log Channel: {stats['log_status']}\n"
         f"• Sub 2 Channel: {stats['sub2_status']}\n"
-        f"• Broadcasts Sent: <b>{stats['total_broadcasts']}</b>\n\n"
+        f"• Broadcasts Executed: <b>{stats['total_broadcasts']}</b>\n\n"
         f"<b>🕒 Recent Activity:</b>\n{activity_text}"
     )
 
@@ -80,8 +82,8 @@ async def handle_users_view(callback: types.CallbackQuery) -> None:
         uid = u.get("user_id")
         fname = escape_html(u.get("first_name", "Unknown"))
         uname = f"@{u.get('username')}" if u.get("username") else "No username"
-        joined = format_datetime(u.get("joined_at"))
-        status_icon = "🟢" if u.get("status") == "active" else "🔴"
+        joined = format_datetime(u.get("first_started_at") or u.get("joined_at"))
+        status_icon = "🟢" if not u.get("is_blocked") else "🔴"
         user_rows.append(f"{status_icon} <b>{fname}</b> (<code>{uid}</code>) — {uname}\n   <i>Joined: {joined}</i>")
 
     users_list_text = "\n".join(user_rows) if user_rows else "No users registered yet."

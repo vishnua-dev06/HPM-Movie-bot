@@ -1,20 +1,37 @@
-"""Unit tests for administrator authentication and authorization enforcement."""
+"""Unit tests for administrator authentication and authorization enforcement supporting multiple admins."""
 
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from aiogram.types import CallbackQuery, Message, User
 from config import settings
+from database.admins import AdminRepository
 from middlewares.admin_auth import AdminAuthMiddleware, IsAdminFilter
 
 
 @pytest.mark.asyncio
-async def test_is_admin_filter_matches_admin():
-    """Verify IsAdminFilter returns True for configured ADMIN_ID."""
+async def test_is_admin_filter_matches_primary_admin():
+    """Verify IsAdminFilter returns True for configured primary ADMIN_ID."""
     admin_filter = IsAdminFilter()
 
-    admin_user = User(id=settings.ADMIN_ID, is_bot=False, first_name="Admin")
+    admin_user = User(id=settings.primary_admin_id, is_bot=False, first_name="Owner")
     mock_message = MagicMock(spec=Message)
     mock_message.from_user = admin_user
+
+    result = await admin_filter(mock_message)
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_is_admin_filter_matches_dynamically_added_secondary_admin():
+    """Verify IsAdminFilter returns True for second administrator added to database."""
+    admin_filter = IsAdminFilter()
+    secondary_admin_id = 444333222
+
+    await AdminRepository.add_admin(secondary_admin_id, added_by=settings.primary_admin_id)
+
+    secondary_user = User(id=secondary_admin_id, is_bot=False, first_name="SecondaryAdmin")
+    mock_message = MagicMock(spec=Message)
+    mock_message.from_user = secondary_user
 
     result = await admin_filter(mock_message)
     assert result is True
@@ -59,11 +76,11 @@ async def test_admin_auth_middleware_blocks_unauthorized_callback():
 
 @pytest.mark.asyncio
 async def test_admin_auth_middleware_allows_authorized_callback():
-    """Verify AdminAuthMiddleware permits callback execution for ADMIN_ID."""
+    """Verify AdminAuthMiddleware permits callback execution for authorized admins."""
     middleware = AdminAuthMiddleware()
 
     handler = AsyncMock(return_value="executed_ok")
-    admin_user = User(id=settings.ADMIN_ID, is_bot=False, first_name="Boss")
+    admin_user = User(id=settings.primary_admin_id, is_bot=False, first_name="Boss")
 
     mock_callback = MagicMock(spec=CallbackQuery)
     mock_callback.from_user = admin_user

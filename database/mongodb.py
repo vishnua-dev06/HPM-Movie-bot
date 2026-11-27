@@ -14,7 +14,7 @@ class Database:
 
     @classmethod
     async def connect(cls) -> None:
-        """Initialize MongoDB connection and create required indexes."""
+        """Initialize MongoDB connection, indexes, and initial admin seeding."""
         if cls.client is not None:
             return
 
@@ -31,6 +31,7 @@ class Database:
 
             await cls._create_indexes()
             await cls._seed_default_menu_settings()
+            await cls._bootstrap_initial_admins()
         except Exception as e:
             logger.error("Failed to connect to MongoDB: %s", e)
             raise
@@ -58,10 +59,12 @@ class Database:
         db = cls.get_db()
         logger.info("Ensuring MongoDB collection indexes...")
 
-        # 1. users: unique index on user_id
+        # 1. users: unique index on user_id, indexes for query performance
         await db.users.create_index("user_id", unique=True)
         await db.users.create_index("joined_at")
+        await db.users.create_index("first_started_at")
         await db.users.create_index("status")
+        await db.users.create_index("is_blocked")
 
         # 2. movies: indexes for catalog browsing
         await db.movies.create_index([("category", 1), ("year", -1)])
@@ -87,10 +90,30 @@ class Database:
             unique=True,
         )
 
-        # 8. broadcasts: index on started_at
-        await db.broadcasts.create_index("started_at")
+        # 8. broadcasts: index on started_at, status
+        await db.broadcasts.create_index("created_at")
+        await db.broadcasts.create_index("status")
 
-        # 9. activity_logs: index on created_at and user_id
+        # 9. broadcast_recipients: compound unique index and status query index
+        await db.broadcast_recipients.create_index(
+            [("broadcast_id", 1), ("user_id", 1)],
+            unique=True,
+        )
+        await db.broadcast_recipients.create_index(
+            [("broadcast_id", 1), ("status", 1)],
+        )
+
+        # 10. admins: unique index on admin_id
+        await db.admins.create_index("admin_id", unique=True)
+
+        # 11. user_activity: index on timestamp and user_id
+        await db.user_activity.create_index([("user_id", 1), ("timestamp", -1)])
+        await db.user_activity.create_index("timestamp")
+
+        # 12. log_channel_settings: unique index on key
+        await db.log_channel_settings.create_index("key", unique=True)
+
+        # 13. activity_logs: index on created_at and user_id
         await db.activity_logs.create_index("created_at")
         await db.activity_logs.create_index("user_id")
 
@@ -110,3 +133,11 @@ class Database:
                     upsert=True,
                 )
             logger.info("Default menu settings seeded.")
+
+    @classmethod
+    async def _bootstrap_initial_admins(cls) -> None:
+        """Bootstrap configured environment administrators into MongoDB."""
+        from database.admins import AdminRepository
+        initial_ids = settings.get_initial_admin_ids()
+        if initial_ids:
+            await AdminRepository.bootstrap_admins(initial_ids)
